@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>DCL Team Tracker</title>
+    <style>
+      :root { --orange: #ff8c00; --black: #111111; --dark: #1b1b1b; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: linear-gradient(180deg, var(--black), var(--dark)); color: white; }
+      .app { max-width: 900px; margin: 0 auto; padding: 16px; }
+      .title { color: var(--orange); font-size: 2rem; font-weight: 800; text-align: center; }
+      .card { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; padding: 14px; margin: 12px 0; }
+      label { display:block; margin-top: 10px; margin-bottom: 6px; font-weight: 600; }
+      input, select, button { width: 100%; box-sizing: border-box; border-radius: 12px; border: 0; padding: 14px; font-size: 16px; }
+      input, select { background: #fff; color: #000; }
+      button { background: var(--orange); color: #000; font-weight: 800; }
+      .row { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .stats { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .stat { background: rgba(255,255,255,.08); padding: 14px; border-radius: 14px; text-align:center; }
+      .list { width: 100%; border-collapse: collapse; }
+      .list th, .list td { border-bottom: 1px solid rgba(255,255,255,.1); padding: 10px 6px; text-align:left; font-size: 14px; }
+      .section { margin-top: 14px; }
+      @media (max-width: 700px) { .row, .stats { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <div class="title">🏆 DCL Team Tracker</div>
+      <div style="text-align:center; opacity:.9; margin-top:6px;">Track teams, players, game types, and match history</div>
+
+      <div class="card">
+        <h2 style="margin-top:0;">Add Match</h2>
+        <div class="row">
+          <div><label>Team 1 player 1</label><input id="t1p1" /></div>
+          <div><label>Team 1 player 2</label><input id="t1p2" /></div>
+        </div>
+        <div class="row">
+          <div><label>Team 2 player 1</label><input id="t2p1" /></div>
+          <div><label>Team 2 player 2</label><input id="t2p2" /></div>
+        </div>
+        <label>Game type</label>
+        <select id="gameType">
+          <option>League</option>
+          <option>Run to 21</option>
+          <option>Driveway rules</option>
+          <option>Cut Throat</option>
+          <option>chairhole</option>
+          <option>Singles</option>
+        </select>
+        <label>Winner</label>
+        <select id="winner">
+          <option value="team1">Team 1</option>
+          <option value="team2">Team 2</option>
+        </select>
+        <div style="margin-top:12px;"><button id="saveBtn">Save Match</button></div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div>Matches</div><h2 id="matchCount">0</h2></div>
+        <div class="stat"><div>Teams</div><h2 id="teamCount">0</h2></div>
+        <div class="stat"><div>Players</div><h2 id="playerCount">0</h2></div>
+      </div>
+
+      <div class="card section"><h3 style="margin-top:0;">Team Standings</h3><div id="teamTable"></div></div>
+      <div class="card section"><h3 style="margin-top:0;">Individual Standings</h3><div id="playerTable"></div></div>
+      <div class="card section"><h3 style="margin-top:0;">Opponent Records</h3><div id="oppTable"></div></div>
+      <div class="card section"><h3 style="margin-top:0;">Match History</h3><div id="matchTable"></div></div>
+    </div>
+
+    <script>
+      const KEY = 'dcl_team_tracker_mobile_v1';
+      const clean = s => s.trim().replace(/s+/g,' ').replace(/\bw/g, c => c.toUpperCase());
+      const teamKey = players => [...players].sort().join(' | ');
+      const load = () => JSON.parse(localStorage.getItem(KEY) || JSON.stringify({matches:[], players:{}, teams:{}, opponents:{}}));
+      const save = data => localStorage.setItem(KEY, JSON.stringify(data));
+      const ensurePlayer = (data, name) => { if(!data.players[name]) data.players[name] = {wins:0, losses:0}; };
+      const ensureTeam = (data, players) => { const k = teamKey(players); if(!data.teams[k]) data.teams[k] = {players, wins:0, losses:0}; return k; };
+
+      function record(data, team1, team2, gameType, winner) {
+        [...team1, ...team2].forEach(p => ensurePlayer(data, p));
+        const k1 = ensureTeam(data, team1), k2 = ensureTeam(data, team2);
+        const wteam = winner === 'team1' ? team1 : team2;
+        const lteam = winner === 'team1' ? team2 : team1;
+        data.teams[k1][winner === 'team1' ? 'wins' : 'losses']++;
+        data.teams[k2][winner === 'team2' ? 'wins' : 'losses']++;
+        wteam.forEach(p => data.players[p].wins++);
+        lteam.forEach(p => data.players[p].losses++);
+        if(!data.opponents[k1]) data.opponents[k1] = {};
+        if(!data.opponents[k2]) data.opponents[k2] = {};
+        if(!data.opponents[k1][k2]) data.opponents[k1][k2] = {wins:0, losses:0};
+        if(!data.opponents[k2][k1]) data.opponents[k2][k1] = {wins:0, losses:0};
+        if(winner === 'team1') { data.opponents[k1][k2].wins++; data.opponents[k2][k1].losses++; }
+        else { data.opponents[k1][k2].losses++; data.opponents[k2][k1].wins++; }
+        data.matches.unshift({time:new Date().toLocaleString(), gameType, team1, team2, winner});
+      }
+
+      function render() {
+        const data = load();
+        document.getElementById('matchCount').textContent = data.matches.length;
+        document.getElementById('teamCount').textContent = Object.keys(data.teams).length;
+        document.getElementById('playerCount').textContent = Object.keys(data.players).length;
+        const teamRows = Object.entries(data.teams).sort((a,b)=>b[1].wins-a[1].wins).map(([k,v])=>`<tr><td>${k}</td><td>${v.wins}</td><td>${v.losses}</td></tr>`).join('') || '<p>No teams yet.</p>';
+        const playerRows = Object.entries(data.players).sort((a,b)=>b[1].wins-a[1].wins).map(([k,v])=>`<tr><td>${k}</td><td>${v.wins}</td><td>${v.losses}</td></tr>`).join('') || '<p>No players yet.</p>';
+        const oppRows = Object.entries(data.opponents).flatMap(([team, opps]) => Object.entries(opps).map(([opp, rec]) => `<tr><td>${team}</td><td>${opp}</td><td>${rec.wins}</td><td>${rec.losses}</td></tr>`)).join('') || '<p>No opponent stats yet.</p>';
+        const matchRows = data.matches.map(m => `<tr><td>${m.time}</td><td>${m.gameType}</td><td>${m.team1.join(' / ')}</td><td>${m.team2.join(' / ')}</td><td>${m.winner === 'team1' ? 'Team 1' : 'Team 2'}</td></tr>`).join('') || '<p>No matches yet.</p>';
+        document.getElementById('teamTable').innerHTML = `<table class='list'><tr><th>Team</th><th>W</th><th>L</th></tr>${teamRows}</table>`;
+        document.getElementById('playerTable').innerHTML = `<table class='list'><tr><th>Player</th><th>W</th><th>L</th></tr>${playerRows}</table>`;
+        document.getElementById('oppTable').innerHTML = `<table class='list'><tr><th>Team</th><th>Opponent</th><th>W</th><th>L</th></tr>${oppRows}</table>`;
+        document.getElementById('matchTable').innerHTML = `<table class='list'><tr><th>Time</th><th>Game</th><th>Team 1</th><th>Team 2</th><th>Winner</th></tr>${matchRows}</table>`;
+      }
+
+      document.getElementById('saveBtn').onclick = () => {
+        const t1p1 = clean(document.getElementById('t1p1').value);
+        const t1p2 = clean(document.getElementById('t1p2').value);
+        const t2p1 = clean(document.getElementById('t2p1').value);
+        const t2p2 = clean(document.getElementById('t2p2').value);
+        const gameType = document.getElementById('gameType').value;
+        const winner = document.getElementById('winner').value;
+        if(!t1p1 || !t1p2 || !t2p1 || !t2p2) return alert('Fill all player names');
+        if(new Set([t1p1,t1p2,t2p1,t2p2]).size !== 4) return alert('Each player must be unique in a match');
+        const data = load();
+        record(data, [t1p1,t1p2], [t2p1,t2p2], gameType, winner);
+        save(data);
+        ['t1p1','t1p2','t2p1','t2p2'].forEach(id => document.getElementById(id).value='');
+        render();
+      };
+
+      render();
+    </script>
+  </body>
+</html>
